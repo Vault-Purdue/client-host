@@ -1,0 +1,10 @@
+cffi==2.0.0
+crcmod==1.7
+cryptography==46.0.6
+iniconfig==2.3.0
+packaging==26.0
+pluggy==1.6.0
+pycparser==3.0
+Pygments==2.19.2
+pyserial==3.5
+pytest==9.0.2
