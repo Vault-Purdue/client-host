@@ -32,12 +32,13 @@ class Session:
 
         payload = self._expect_frame(MessageID.KEY_EXCHANGE)
 
-    def exchange_pin(self) -> bool:
-        frame = framing.build_frame(MessageID.PIN_EXCHANGE, b'')    # TODO: payload content
+    def exchange_pin(self, pin: str) -> bool:
+        plaintext = pin.encode('ascii')
+        frame = framing.build_frame(MessageID.PIN_EXCHANGE, plaintext)    
         self._transport.send(frame)
 
-        payload = self._expect_frame(MessageID.PIN_EXCHANGE)
-        return True
+        payload = self._expect_frame(MessageID.PIN_ACK)
+        return payload == b'\x00'
     
     def close(self) -> None: 
         frame = framing.build_frame(MessageID.SESSION_CLOSE, b'')
@@ -58,10 +59,14 @@ class Session:
                 yield chunk
 
     def write(self, local_path: str, remote_path: str) -> bool:
-        # TODO: remote path?
-        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'') # TODO: payload specifies download
+        path_bytes = remote_path.encode('ascii') + b'\x00'
+        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x00' + path_bytes) # 0x00 at the beginning specifies write
         self._transport.send(frame)
-        _ = self._expect_frame(MessageID.FILE_REQ_ACK) # TODO: need to check the payload value
+        payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
+
+        if payload != b'\x00':
+            print("File request was rejected")
+            return False
 
         # TODO: check how to send FILE_START FILE_END if file is only one chunk
         # Right now, in this case (only this case), I send an empty FILE_END at the end
@@ -87,14 +92,22 @@ class Session:
         frame = framing.build_frame(MessageID.FILE_TRANSFER_COMPLETE, struct.pack(">H", file_checksum))
         self._transport.send(frame)
 
-        _ = self._expect_frame(MessageID.FILE_COMPLETE_ACK) # TODO: check payload for checksum success
+        payload = self._expect_frame(MessageID.FILE_COMPLETE_ACK) 
+        if payload != b'\x00':
+            print("File transfer failed: data may be corrupted (CRC mismatch)")
+            return False
+        
         return True
 
     def read(self, local_path: str, remote_path: str) -> bool:
-        #TODO: remote path?
-        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'') # TODO: payload specifies upload
+        path_bytes = remote_path.encode('ascii') + b'\x00'
+        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x01' + path_bytes) # 0x01 at the beginning specifies read
         self._transport.send(frame)
-        _ = self._expect_frame(MessageID.FILE_REQ_ACK) # TODO: check the payload value 
+        payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
+
+        if payload != b'\x00':
+            print("File request was rejected")
+            return False
 
         file_start = self._expect_frame(MessageID.FILE_START)
         file_blocks = []
@@ -119,10 +132,10 @@ class Session:
 
         expected_crc = struct.unpack(">H", self._expect_frame(MessageID.FILE_TRANSFER_COMPLETE))[0]
         whole_file = file_start + b''.join(file_blocks) + file_end
-        crc = framing.crc(whole_file)
+        computed_crc = framing.crc(whole_file)
 
-        if crc == expected_crc:
-            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'') # TODO: success value 
+        if computed_crc == expected_crc:
+            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x00') # success
             self._transport.send(frame)
 
             with open(local_path, 'wb')  as f:
@@ -130,7 +143,8 @@ class Session:
 
             return True 
         else:
-            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'') # TODO: failure value 
+            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x01') # failure
             self._transport.send(frame)
+            print("File transfer failed: data may be corrupted (CRC mismatch)")
             return False
 

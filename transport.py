@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 import serial
 
-# the abstract class exists because there is a MockTransport in the tests.
 class Transport(ABC):
     @abstractmethod 
     def send(self, data: bytes) -> None: ...
