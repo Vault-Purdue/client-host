@@ -3,36 +3,44 @@ import crcmod
 
 from protocol import MessageID
 
-SOF = b'\xaa\xaa'
-HEADER_SIZE = 6     # SOF(2) + msg_id(2) + payload_len(2)
+SOF = b'\xAA'
+HEADER_SIZE = 3    # SOF(1) + msg_id(1) + payload_len(1)
 CHECKSUM_SIZE = 2
 _crc16 = crcmod.mkCrcFun(0x11021, 0xFFFF, rev=False)
 
-# assumes len(payload) <= 1024 bytes
+# len(payload) must be <= 255 bytes
 def build_frame(msg_id: MessageID, payload: bytes) -> bytes:
+    if len(payload) > 255:
+        raise ValueError("payload is larger than 255 bytes")
+
+
     checksum = crc(payload) if payload else 0x0000
     
     # TODO: check endianness    
     
-    # > is big endian, H is unsigned 2 bytes
+    # > is big endian, B is unsigned 1 byte, H is unsigned 2 bytes
     frame = (
         SOF                             +
-        struct.pack(">H", msg_id)       +
-        struct.pack(">H", len(payload)) +
+        struct.pack("B", msg_id)       +
+        struct.pack("B", len(payload)) +
         payload                         +
         struct.pack(">H", checksum)
     )
     return frame
 
-# first two bytes need to be 0xAA
+# first byte needs to be 0xAA
 def parse_frame(data: bytes) -> tuple[MessageID, bytes]:
-    if data[:2] != b'\xAA\xAA':
+    if len(data) < HEADER_SIZE:
+        raise ValueError("Received frame shorter than header size")
+
+    # SOF[0] = 0xAA, indexing a bytes returns an int
+    if data[0] != SOF[0]:
         raise ValueError("Invalid SOF")
+    msg_id = data[1]
+    payload_len = data[2]
+    payload = data[HEADER_SIZE : HEADER_SIZE + payload_len]
     # > is big endian, H is unsigned 2 bytes
-    msg_id = struct.unpack(">H", data[2:4])[0]
-    payload_len = struct.unpack(">H", data[4:6])[0]
-    payload = data[6 : 6 + payload_len]
-    checksum = struct.unpack(">H", data[6 + payload_len:])[0]
+    checksum = struct.unpack(">H", data[HEADER_SIZE + payload_len:])[0]
 
     expected = crc(payload) if payload else 0x0000    
     if checksum != expected:
@@ -41,7 +49,7 @@ def parse_frame(data: bytes) -> tuple[MessageID, bytes]:
     return MessageID(msg_id), payload
 
 def get_payload_len_from_header(header: bytes) -> int:
-    return struct.unpack(">H", header[4:6])[0]
+    return header[2]
 
 # TODO: the documentation says "If there is no payload, the checksum field should be 0x00."
 # Does this mean that the crc of any empty field should manually be forced to 0x00 (i.e. if check down here).
