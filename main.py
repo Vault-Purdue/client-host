@@ -75,10 +75,20 @@ class Shell(cmd.Cmd):
         args = arg.split()
 
         if len(args) != 2:
-            print("Usage <remote_path> <local_path>")
+            print("Usage read <remote_path> <local_path>")
             return
 
         self._session.read(args[1], args[0]) # type: ignore
+
+    def do_pin(self, arg):
+        args = arg.split()
+        if len(args) != 1:
+            print("Usage pin <pin>")
+            return 
+        
+        if len(args[0]) != 6 or not args[0].isdigit():
+            raise ValueError("Pin must be made of 6 digits")
+        self._pin = args[0]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HSM Host Tool")
