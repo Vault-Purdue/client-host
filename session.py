@@ -2,10 +2,12 @@ from transport import Transport
 import framing
 from protocol import MessageID
 import struct
+from crypto import Crypto
 
 class Session:
     def __init__(self, transport: Transport):
         self._transport = transport
+        self._crypto = Crypto()
 
     def _receive_frame(self) -> tuple[MessageID, bytes]:
         header = self._transport.receive(framing.HEADER_SIZE)
@@ -21,16 +23,17 @@ class Session:
         return payload
 
     def open(self) -> None:
-        frame = framing.build_frame(MessageID.SESSION_OPEN, b'')
+        frame = framing.build_frame(MessageID.SESSION_OPEN, b'\x41')
         self._transport.send(frame)
 
         # receive nothing
 
     def exchange_keys(self) -> None:
-        frame = framing.build_frame(MessageID.KEY_EXCHANGE, b'')    # TODO: payload content
+        frame = framing.build_frame(MessageID.KEY_EXCHANGE, self._crypto.public_key())
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.KEY_EXCHANGE)
+        self._crypto.compute_shared_key(payload)
 
     def exchange_pin(self, pin: str) -> bool:
         plaintext = pin.encode('ascii')
@@ -58,9 +61,10 @@ class Session:
             while chunk := f.read(chunk_size):
                 yield chunk
 
-    def write(self, local_path: str, remote_path: str) -> bool:
-        path_bytes = remote_path.encode('ascii') + b'\x00'
-        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x00' + path_bytes) # 0x00 at the beginning specifies write
+    def write(self, local_path: str, file_id: str) -> bool:
+        # > is big endian, H is unsigned 2 bytes
+        file_id_bytes = struct.pack(">H", int(file_id))
+        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x77' + file_id_bytes) # 0x77 at the beginning specifies write
         self._transport.send(frame)
         payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
 
@@ -79,7 +83,7 @@ class Session:
             elif i == last_index:
                 msg_id = MessageID.FILE_END
             else:
-                msg_id = MessageID.FILE_BLOCK
+                msg_id = MessageID.FILE_CHUNK
 
             frame = framing.build_frame(msg_id, chunk)
             self._transport.send(frame)
@@ -99,9 +103,10 @@ class Session:
         
         return True
 
-    def read(self, local_path: str, remote_path: str) -> bool:
-        path_bytes = remote_path.encode('ascii') + b'\x00'
-        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x01' + path_bytes) # 0x01 at the beginning specifies read
+    def read(self, local_path: str, file_id: str) -> bool:
+        # > is big endian, H is unsigned 2 bytes
+        file_id_bytes = struct.pack(">H", int(file_id))
+        frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x72' + file_id_bytes) # 0x72 at the beginning specifies read
         self._transport.send(frame)
         payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
 
@@ -122,7 +127,7 @@ class Session:
                 file_end = payload 
                 reached_file_end = True
                 break
-            elif msg_id == MessageID.FILE_BLOCK:
+            elif msg_id == MessageID.FILE_CHUNK:
                 file_blocks.append(payload)
             else:
                 raise ValueError(f"Expected File-related ID, got {msg_id.name}")

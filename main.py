@@ -36,7 +36,9 @@ class Shell(cmd.Cmd):
         if pin is None:
             pin = input("Pin: ")
             if len(pin) != 6 or not pin.isdigit():
-                raise ValueError("Pin must be made of 6 digits")
+                print("Pin must be made of 6 digits")
+                self._session = None
+                return
 
         self._session.open()
         self._session.exchange_keys()
@@ -51,6 +53,7 @@ class Shell(cmd.Cmd):
         if not self._check_session():
             return 
         self._session.close() # type: ignore
+        self._session = None
 
     def do_status(self, arg):
         if not self._check_session():
@@ -64,7 +67,7 @@ class Shell(cmd.Cmd):
         args = arg.split()
 
         if len(args) != 2:
-            print("Usage write <local_path> <remote_path>")
+            print("Usage write <local_path> <file_id>")
             return 
 
         self._session.write(args[0], args[1]) # type: ignore
@@ -75,10 +78,10 @@ class Shell(cmd.Cmd):
         args = arg.split()
 
         if len(args) != 2:
-            print("Usage read <remote_path> <local_path>")
+            print("Usage read <local_path> <file_id>")
             return
 
-        self._session.read(args[1], args[0]) # type: ignore
+        self._session.read(args[0], args[1]) # type: ignore
 
     def do_pin(self, arg):
         args = arg.split()
@@ -87,7 +90,8 @@ class Shell(cmd.Cmd):
             return 
         
         if len(args[0]) != 6 or not args[0].isdigit():
-            raise ValueError("Pin must be made of 6 digits")
+            print("Pin must be made of 6 digits")
+            return
         self._pin = args[0]
 
 if __name__ == "__main__":
