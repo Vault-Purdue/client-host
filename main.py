@@ -1,6 +1,6 @@
 import cmd 
 import argparse
-import serial
+from serial import SerialException
 from session import Session
 from transport import *
 
@@ -16,13 +16,12 @@ class Shell(cmd.Cmd):
         self._pin = None
         if pin_path is not None:
             with open(pin_path, 'r') as f:
-                pin = f.read()
+                pin = f.read().strip()
                 if len(pin) != 6 or not pin.isdigit():
                     raise ValueError("Pin must be made of 6 digits")
                 self._pin = pin
                 
                 
-
     def _check_session(self) -> bool:
         if self._session is None:
             print("Not authenticated. Run 'auth' first.")
@@ -40,20 +39,29 @@ class Shell(cmd.Cmd):
                 self._session = None
                 return
 
-        self._session.open()
-        self._session.exchange_keys()
-        success = self._session.exchange_pin(pin)
+        try:
+            self._session.open()
+            self._session.exchange_keys()
+            success = self._session.exchange_pin(pin)
 
-        if not success:             # TODO: this assumes the HSM closes the session after a failed pin exchanged
-            self._session = None    #       without having to send a SESSION_CLOSE. Check with whoever
-            print("Authentication failed")
+            if not success:             # TODO: this assumes the HSM closes the session after a failed pin exchanged
+                self._session = None    #       without having to send a SESSION_CLOSE. Check with whoever
+                print("Authentication failed")
+        
+        except (ValueError, TimeoutError, SerialException) as e:
+            print(f"Error: {e}\nClosed session")
+            self._session = None
 
 
     def do_close(self, arg):
         if not self._check_session():
             return 
-        self._session.close() # type: ignore
-        self._session = None
+        try:
+            self._session.close() # type: ignore
+        except SerialException as e:
+            print(f"Error: {e}\nClosed session")
+        finally:
+            self._session = None
 
 
     def do_write(self, arg):
@@ -65,7 +73,18 @@ class Shell(cmd.Cmd):
             print("Usage write <local_path> <file_id>")
             return 
 
-        self._session.write(args[0], args[1]) # type: ignore
+        if not args[1].isdigit():
+            print("File ID must be a number")
+            return
+
+        try:
+            self._session.write(args[0], args[1]) # type: ignore
+
+        except OSError as e:
+            print(f"File error: {e}")
+        except (ValueError, TimeoutError, SerialException) as e:
+            print(f"Error: {e}\nClosed session")
+            self._session = None
 
     def do_read(self, arg):
         if not self._check_session():
@@ -76,7 +95,18 @@ class Shell(cmd.Cmd):
             print("Usage read <local_path> <file_id>")
             return
 
-        self._session.read(args[0], args[1]) # type: ignore
+        if not args[1].isdigit():
+            print("File ID must be a number")
+            return
+        
+        try:
+            self._session.read(args[0], args[1]) # type: ignore
+            
+        except OSError as e:
+            print(f"File error: {e}")
+        except (ValueError, TimeoutError, SerialException) as e:
+            print(f"Error: {e}\nClosed session")
+            self._session = None
 
     def do_pin(self, arg):
         args = arg.split()
@@ -88,6 +118,13 @@ class Shell(cmd.Cmd):
             print("Pin must be made of 6 digits")
             return
         self._pin = args[0]
+
+    def do_quit(self, arg):
+        return True
+    
+    def do_EOF(self, arg):
+        print()
+        return True
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HSM Host Tool")

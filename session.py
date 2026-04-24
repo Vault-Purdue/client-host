@@ -50,6 +50,12 @@ class Session:
         # receive nothing
 
     def write(self, local_path: str, file_id: str) -> bool:
+        with open(local_path, 'rb') as f:
+            file_content = f.read()
+            if len(file_content) != 88:
+                print(f"File must be exactly 88 bytes, got {len(file_content)}")
+                return False
+
         # > is big endian, H is unsigned 2 bytes
         file_id_bytes = struct.pack(">H", int(file_id))
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x77' + file_id_bytes) # 0x77 at the beginning specifies write
@@ -59,11 +65,6 @@ class Session:
         if payload != b'\x00':
             print("File request was rejected")
             return False
-        
-        with open(local_path, 'rb') as f:
-            file_content = f.read()
-            if len(file_content) != 88:
-                raise ValueError(f"File must be exactly 88 bytes, got {len(file_content)}")
 
         frame = framing.build_frame(MessageID.FILE_CONTENT, file_content)
         self._transport.send(frame)
@@ -102,5 +103,3 @@ class Session:
             f.write(file_content)
 
         return True 
-        
-
