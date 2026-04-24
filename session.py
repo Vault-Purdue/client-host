@@ -49,18 +49,6 @@ class Session:
 
         # receive nothing
 
-    def status(self) -> bytes:
-        frame = framing.build_frame(MessageID.STATUS_QUERY, b'')    # TODO: payload content
-        self._transport.send(frame)
-
-        payload = self._expect_frame(MessageID.STATUS_RESPONSE)
-        return payload
-    
-    def _chunk_file(self, path: str, chunk_size: int = 1024):
-        with open(path, 'rb') as f:
-            while chunk := f.read(chunk_size):
-                yield chunk
-
     def write(self, local_path: str, file_id: str) -> bool:
         # > is big endian, H is unsigned 2 bytes
         file_id_bytes = struct.pack(">H", int(file_id))
@@ -71,29 +59,13 @@ class Session:
         if payload != b'\x00':
             print("File request was rejected")
             return False
+        
+        with open(local_path, 'rb') as f:
+            file_content = f.read()
+            if len(file_content) != 88:
+                raise ValueError(f"File must be exactly 88 bytes, got {len(file_content)}")
 
-        # TODO: check how to send FILE_START FILE_END if file is only one chunk
-        # Right now, in this case (only this case), I send an empty FILE_END at the end
-        chunks = list(self._chunk_file(local_path))
-        last_index = len(chunks) - 1
-
-        for i, chunk in enumerate(chunks):
-            if i == 0:
-                msg_id = MessageID.FILE_START
-            elif i == last_index:
-                msg_id = MessageID.FILE_END
-            else:
-                msg_id = MessageID.FILE_CHUNK
-
-            frame = framing.build_frame(msg_id, chunk)
-            self._transport.send(frame)
-
-        if last_index == 0: # file is only one chunk. Didn't send FILE_END
-            frame = framing.build_frame(MessageID.FILE_END, b'')
-            self._transport.send(frame)
-
-        file_checksum = framing.crc(b''.join(chunks))
-        frame = framing.build_frame(MessageID.FILE_TRANSFER_COMPLETE, struct.pack(">H", file_checksum))
+        frame = framing.build_frame(MessageID.FILE_CONTENT, file_content)
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.FILE_COMPLETE_ACK) 
@@ -114,42 +86,21 @@ class Session:
             print("File request was rejected")
             return False
 
-        file_start = self._expect_frame(MessageID.FILE_START)
-        file_blocks = []
-
-        # TODO: some timing check so that it's impossible to be stuck here forever
-        MAX_BLOCKS = 1024   # sanity limit
-        reached_file_end = False
-        for _ in range(MAX_BLOCKS):
-            msg_id, payload = self._receive_frame()
-
-            if msg_id == MessageID.FILE_END:
-                file_end = payload 
-                reached_file_end = True
-                break
-            elif msg_id == MessageID.FILE_CHUNK:
-                file_blocks.append(payload)
-            else:
-                raise ValueError(f"Expected File-related ID, got {msg_id.name}")
-            
-        if not reached_file_end:
-            raise ValueError("File transfer exceeded maximum block count")
-
-        expected_crc = struct.unpack(">H", self._expect_frame(MessageID.FILE_TRANSFER_COMPLETE))[0]
-        whole_file = file_start + b''.join(file_blocks) + file_end
-        computed_crc = framing.crc(whole_file)
-
-        if computed_crc == expected_crc:
-            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x00') # success
+        try:
+            file_content = self._expect_frame(MessageID.FILE_CONTENT)
+        except ValueError as e:
+            # technically this catches also other exceptions, not just checksum mismatches
+            # I think it's an acceptable behavior
+            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x01') # checksum mismatch
             self._transport.send(frame)
+            raise e
 
-            with open(local_path, 'wb')  as f:
-                f.write(whole_file)
+        frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x00') # checksum ok
+        self._transport.send(frame)
 
-            return True 
-        else:
-            frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x01') # failure
-            self._transport.send(frame)
-            print("File transfer failed: data may be corrupted (CRC mismatch)")
-            return False
+        with open(local_path, 'wb') as f:
+            f.write(file_content)
+
+        return True 
+        
 
