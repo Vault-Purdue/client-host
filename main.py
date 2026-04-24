@@ -1,6 +1,6 @@
 import cmd 
 import argparse
-from protocol import MessageID
+import serial
 from session import Session
 from transport import *
 
@@ -54,11 +54,6 @@ class Shell(cmd.Cmd):
             return 
         self._session.close() # type: ignore
         self._session = None
-
-    def do_status(self, arg):
-        if not self._check_session():
-           return
-        _ = self._session.status() # type: ignore
 
 
     def do_write(self, arg):
