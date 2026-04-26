@@ -1,5 +1,6 @@
 import cmd 
 import argparse
+import getpass
 from serial import SerialException
 from session import Session
 from transport import *
@@ -33,7 +34,7 @@ class Shell(cmd.Cmd):
         pin = self._pin
 
         if pin is None:
-            pin = input("Pin: ")
+            pin = getpass.getpass("Pin: ")
             if len(pin) != 6 or not pin.isdigit():
                 print("Pin must be made of 6 digits")
                 self._session = None
