@@ -56,8 +56,7 @@ class Session:
                 print(f"File must be exactly 88 bytes, got {len(file_content)}")
                 return False
 
-        # > is big endian, H is unsigned 2 bytes
-        file_id_bytes = struct.pack(">H", int(file_id))
+        file_id_bytes = struct.pack("B", int(file_id))
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x77' + file_id_bytes) # 0x77 at the beginning specifies write
         self._transport.send(frame)
         payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
@@ -77,8 +76,7 @@ class Session:
         return True
 
     def read(self, local_path: str, file_id: str) -> bool:
-        # > is big endian, H is unsigned 2 bytes
-        file_id_bytes = struct.pack(">H", int(file_id))
+        file_id_bytes = struct.pack("B", int(file_id))
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x72' + file_id_bytes) # 0x72 at the beginning specifies read
         self._transport.send(frame)
         payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
