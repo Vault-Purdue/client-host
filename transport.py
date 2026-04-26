@@ -24,6 +24,7 @@ class SerialTransport(Transport):
 
     def send(self, data: bytes) -> None:
         self._connect()
+        print(f"Sent frame: {data.hex(' ').upper()}")
         self._ser.write(data) # type: ignore
 
     def receive(self, n: int) -> bytes:
