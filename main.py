@@ -10,11 +10,12 @@ class Shell(cmd.Cmd):
     intro = "HSM Host Tool. Type 'help' for commands."
     prompt = "hsm> "
 
-    def __init__(self, transport: Transport, pin_path: str | None = None):
+    def __init__(self, transport: Transport, pin_path: str | None = None, debug: bool = False):
         super().__init__()
         self._transport = transport
         self._session = None
         self._pin = None
+        self._debug = debug
         if pin_path is not None:
             with open(pin_path, 'r') as f:
                 pin = f.read().strip()
@@ -30,7 +31,7 @@ class Shell(cmd.Cmd):
         return True
 
     def do_auth(self, arg):
-        self._session = Session(self._transport)
+        self._session = Session(self._transport, debug=self._debug)
         pin = self._pin
 
         if pin is None:
@@ -132,10 +133,11 @@ if __name__ == "__main__":
     parser.add_argument("port", nargs="?", help="Serial port")
     parser.add_argument("--timeout", type=float, default=2.0, help="Serial read timeout in seconds")
     parser.add_argument("--pin", type=str, default=None, help="Path to pin file")
+    parser.add_argument("--debug", action='store_true', help="Prints raw hexdump at every exchange")
     args = parser.parse_args()
 
     if args.port:
-        transport = SerialTransport(args.port, baudrate=115200, timeout=args.timeout)
+        transport = SerialTransport(args.port, baudrate=115200, timeout=args.timeout, debug=args.debug)
     else:
         parser.error("Please provide a port")
-    Shell(transport, pin_path=args.pin).cmdloop()
+    Shell(transport, pin_path=args.pin, debug=args.debug).cmdloop()

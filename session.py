@@ -5,16 +5,20 @@ import struct
 from crypto import Crypto
 
 class Session:
-    def __init__(self, transport: Transport):
+    def __init__(self, transport: Transport, debug: bool):
         self._transport = transport
         self._crypto = Crypto()
+        self._debug = debug
 
     def _receive_frame(self) -> tuple[MessageID, bytes]:
         header = self._transport.receive(framing.HEADER_SIZE)
         payload_len = framing.get_payload_len_from_header(header)
         rest = self._transport.receive(payload_len + framing.CHECKSUM_SIZE)
         full_frame = header + rest 
-        print(f"Received frame: {full_frame.hex(' ').upper()}")
+
+        if self._debug:
+            print(f"Received frame: {full_frame.hex(' ').upper()}")
+        
         return framing.parse_frame(full_frame)
     
     def _expect_frame(self, expected_id: MessageID) -> bytes:

@@ -9,11 +9,12 @@ class Transport(ABC):
     def receive(self, n: int) -> bytes: ... 
 
 class SerialTransport(Transport):
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 2.0):
+    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 2.0, debug: bool = False):
         self._port = port
         self._baudrate = baudrate
         self._timeout = timeout
         self._ser = None
+        self._debug = debug
 
     # this exists so that the serial connection is opened lazily on the first send/receive
     # without this the script crashes at startup if the hsm is not connected
@@ -24,7 +25,8 @@ class SerialTransport(Transport):
 
     def send(self, data: bytes) -> None:
         self._connect()
-        print(f"Sent frame: {data.hex(' ').upper()}")
+        if self._debug:
+            print(f"Sent frame: {data.hex(' ').upper()}")
         self._ser.write(data) # type: ignore
 
     def receive(self, n: int) -> bytes:

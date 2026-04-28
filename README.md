@@ -13,7 +13,7 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python main.py <port> [--timeout <seconds>] [--pin <file>]
+python main.py <port> [--timeout <seconds>] [--pin <file>] [--debug]
 ```
 
 **Options**
@@ -21,7 +21,8 @@ python main.py <port> [--timeout <seconds>] [--pin <file>]
 | Option | Default | Description |
 | --- | --- | --- |
 | `--timeout <seconds>` | `2.0` | UART receive timeout |
-| `--pin <file>` | ### | Path to file containing PIN (dev only, see note) |
+| `--pin <file>` | `###` | Path to file containing PIN (dev only, see note) |
+| `--debug`      | `false` | Prints raw hexdump at every message exchange |
 
 *`--pin`: this option is clearly unsafe as the pin is stored in plaintext. It's intended for development only. It will probably be removed eventually*
 
