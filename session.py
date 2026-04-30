@@ -28,6 +28,14 @@ class Session:
         
         return payload
 
+    def _log(self, direction: str, message: str, **fields) -> None:
+        print(f"  [{direction}]  {message}")
+        if fields:
+            width = max(len(k) for k in fields)
+            for key, value in fields.items():
+                print(f"           {key:<{width}} : {value}")
+        print()
+
     def open(self) -> None:
         frame = framing.build_frame(MessageID.SESSION_OPEN, b'\x41')
         self._transport.send(frame)
@@ -62,40 +70,45 @@ class Session:
                 print(f"File must be exactly 88 bytes, got {len(file_content)}")
                 return False
 
-        print(f"Requesting write for file ID {file_id}...")
         file_id_bytes = struct.pack("B", int(file_id))
+        self._log("SEND", "FILE_TRANSFER_REQUEST", operation="WRITE", file_id=file_id)
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x77' + file_id_bytes) # 0x77 at the beginning specifies write
         self._transport.send(frame)
-        payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
 
+        payload = self._expect_frame(MessageID.FILE_REQ_ACK)
+        status = "APPROVED" if payload == b'\x00' else "REJECTED"
+        self._log("RECV", "FILE_REQUEST_ACK", status=status)
         if payload != b'\x00':
-            print("File request rejected by HSM")
             return False
 
-        print("Sending file contents...")
+        self._log("SEND", "FILE_CONTENTS", size=f"{len(file_content)} bytes") # TODO: change this with encryption details
         frame = framing.build_frame(MessageID.FILE_CONTENT, file_content)
         self._transport.send(frame)
 
-        payload = self._expect_frame(MessageID.FILE_COMPLETE_ACK) 
+        payload = self._expect_frame(MessageID.FILE_COMPLETE_ACK)
+        crc = "OK" if payload == b'\x00' else "MISMATCH"
+        self._log("RECV", "FILE_TRANSFER_ACK", crc=crc)
         if payload != b'\x00':
-            print("File transfer failed: CRC mismatch report by HSM")
             return False
 
-        print("Write successful.")        
+        print("  Write complete.\n")
         return True
 
     def read(self, local_path: str, file_id: str) -> bool:
-        print(f"Requesting read for file ID {file_id}...")
+        #print(f"Requesting read for file ID {file_id}...")
         file_id_bytes = struct.pack("B", int(file_id))
+        self._log("SEND", "FILE_TRANSFER_REQUEST", operation="READ", file_id=file_id)
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x72' + file_id_bytes) # 0x72 at the beginning specifies read
         self._transport.send(frame)
-        payload = self._expect_frame(MessageID.FILE_REQ_ACK) 
 
+        payload = self._expect_frame(MessageID.FILE_REQ_ACK)
+        status = "APPROVED" if payload == b'\x00' else "REJECTED"
+        self._log("RECV", "FILE_REQUEST_ACK", status=status)
         if payload != b'\x00':
-            print("File request rejected by HSM")
+            #print("File request rejected by HSM")
             return False
 
-        print("Sending file contents...")
+        #print("Receiving file contents...")
         try:
             file_content = self._expect_frame(MessageID.FILE_CONTENT)
         except ValueError as e:
@@ -104,9 +117,11 @@ class Session:
             frame = framing.build_frame(MessageID.FILE_COMPLETE_ACK, b'\x01') # checksum mismatch
             self._transport.send(frame)
             raise e
+        
+        self._log("RECV", "FILE_CONTENTS", size=f"{len(file_content)} bytes", crc="OK") # TODO: change this with encryption details
 
         with open(local_path, 'wb') as f:
             f.write(file_content)
 
-        print("Read successful, saved to {local_path}")   
-        return True 
+        print(f"  Read complete, saved to {local_path}\n")
+        return True
