@@ -70,7 +70,10 @@ class Shell(cmd.Cmd):
         if not self._check_session():
             return 
         try:
-            self._session.close() # type: ignore
+            if not self._session.close(): # type: ignore
+                print("Session close failed")
+            else:
+                print("Session close successful")
         except SerialException as e:
             print(f"Error: {e}\nClosed session")
         finally:

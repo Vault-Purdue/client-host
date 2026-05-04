@@ -63,11 +63,12 @@ class Session:
         
         return payload_decrypted == b'\x00'
     
-    def close(self) -> None: 
-        frame = framing.build_frame(MessageID.SESSION_CLOSE, b'')
+    def close(self) -> bool: 
+        frame = framing.build_frame(MessageID.SESSION_CLOSE, b'\x43')
         self._transport.send(frame)
 
-        # receive nothing
+        payload = self._expect_frame(MessageID.SESSION_CLOSE)
+        return payload == b'\x43'
 
     def write(self, local_path: str, file_id: str) -> bool:
         with open(local_path, 'rb') as f:

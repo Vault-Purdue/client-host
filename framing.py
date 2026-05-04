@@ -13,7 +13,7 @@ def build_frame(msg_id: MessageID, payload: bytes) -> bytes:
     if len(payload) > 128:
         raise ValueError("payload is larger than 128 bytes")
 
-    checksum = crc(payload) if payload else 0x0000
+    checksum = crc(payload)
     
     # TODO: check endianness    
     
