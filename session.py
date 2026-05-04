@@ -40,14 +40,19 @@ class Session:
         frame = framing.build_frame(MessageID.SESSION_OPEN, b'\x41')
         self._transport.send(frame)
 
+        self._log("SEND", "SESSION_OPEN", encrypted="False", payload="A")
+
         payload = self._expect_frame(MessageID.SESSION_OPEN)
+        self._log("RECV", "SESSION_OPEN", encrypted="False", payload=payload.decode())
         return payload == b'\x41'
 
     def exchange_keys(self) -> bool:
         frame = framing.build_frame(MessageID.KEY_EXCHANGE, self._crypto.public_key())
         self._transport.send(frame)
+        self._log("SEND", "KEY_EXCHANGE", encrypted="False", size=f"{len(self._crypto.public_key())} bytes")
 
         payload = self._expect_frame(MessageID.KEY_EXCHANGE)
+        self._log("RECV", "KEY_EXCHANGE", encrypted="False", size=f"{len(payload)} bytes")
         self._crypto.compute_shared_key(payload)
 
         return True 
@@ -57,17 +62,21 @@ class Session:
         ciphertext = self._crypto.encrypt(plaintext)
         frame = framing.build_frame(MessageID.PIN_EXCHANGE, ciphertext)    
         self._transport.send(frame)
+        self._log("SEND", "PIN_EXCHANGE", encrypted="True", size=f"{len(ciphertext)} bytes")
 
         payload = self._expect_frame(MessageID.PIN_ACK)
         payload_decrypted = self._crypto.decrypt(payload)
+        self._log("RECV", "PIN_EXCHANGE_ACK", encrypted="True", size=f"{len(payload)} bytes", decrypted_payload=payload_decrypted.hex())
         
         return payload_decrypted == b'\x00'
     
     def close(self) -> bool: 
         frame = framing.build_frame(MessageID.SESSION_CLOSE, b'\x43')
         self._transport.send(frame)
+        self._log("SEND", "SESSION_CLOSE", encrypted="False", payload="C")
 
         payload = self._expect_frame(MessageID.SESSION_CLOSE)
+        self._log("RECV", "SESSION_CLOSE", encrpyted="False", payload=payload.decode())
         return payload == b'\x43'
 
     def write(self, local_path: str, file_id: str) -> bool:
@@ -78,24 +87,26 @@ class Session:
                 return False
 
         file_id_bytes = struct.pack("B", int(file_id))
-        self._log("SEND", "FILE_TRANSFER_REQUEST", operation="WRITE", file_id=file_id)
+        self._log("SEND", "FILE_TRANSFER_REQUEST", encrypted="False", operation="WRITE", file_id=file_id)
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x77' + file_id_bytes) # 0x77 at the beginning specifies write
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.FILE_REQ_ACK)
         status = "APPROVED" if payload == b'\x00' else "REJECTED"
-        self._log("RECV", "FILE_REQUEST_ACK", status=status)
+        self._log("RECV", "FILE_REQUEST_ACK", encrypted="False", status=status)
         if payload != b'\x00':
             return False
 
-        self._log("SEND", "FILE_CONTENTS", size=f"{len(file_content)} bytes") # TODO: change this with encryption details
         ciphertext = self._crypto.encrypt(file_content)
         frame = framing.build_frame(MessageID.FILE_CONTENT, ciphertext)
         self._transport.send(frame)
+        
+        crc = int.from_bytes(frame[-2:], "big")
+        self._log("SEND", "FILE_CONTENTS", encrypted="True", size=f"{len(ciphertext)} bytes", crc=f"{crc:04X}")
 
         payload = self._expect_frame(MessageID.FILE_COMPLETE_ACK)
         crc = "OK" if payload == b'\x00' else "MISMATCH"
-        self._log("RECV", "FILE_TRANSFER_ACK", crc=crc)
+        self._log("RECV", "FILE_TRANSFER_ACK", encrypted="False", crc_check=crc)
         if payload != b'\x00':
             return False
 
@@ -103,20 +114,17 @@ class Session:
         return True
 
     def read(self, local_path: str, file_id: str) -> bool:
-        #print(f"Requesting read for file ID {file_id}...")
         file_id_bytes = struct.pack("B", int(file_id))
-        self._log("SEND", "FILE_TRANSFER_REQUEST", operation="READ", file_id=file_id)
+        self._log("SEND", "FILE_TRANSFER_REQUEST", encrypted="False", operation="READ", file_id=file_id)
         frame = framing.build_frame(MessageID.FILE_TRANSFER_REQ, b'\x72' + file_id_bytes) # 0x72 at the beginning specifies read
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.FILE_REQ_ACK)
         status = "APPROVED" if payload == b'\x00' else "REJECTED"
-        self._log("RECV", "FILE_REQUEST_ACK", status=status)
+        self._log("RECV", "FILE_REQUEST_ACK", encrypted="False", status=status)
         if payload != b'\x00':
-            #print("File request rejected by HSM")
             return False
 
-        #print("Receiving file contents...")
         try:
             file_content = self._expect_frame(MessageID.FILE_CONTENT)
         except ValueError as e:
@@ -128,7 +136,7 @@ class Session:
         
         file_content_decrypted = self._crypto.decrypt(file_content)
         
-        self._log("RECV", "FILE_CONTENTS", size=f"{len(file_content)} bytes", crc="OK") # TODO: change this with encryption details
+        self._log("RECV", "FILE_CONTENTS", encrypted="True", size=f"{len(file_content)} bytes", crc=f"{framing._crc16(file_content):04X}")
 
         with open(local_path, 'wb') as f:
             f.write(file_content_decrypted)

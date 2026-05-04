@@ -47,19 +47,21 @@ class Shell(cmd.Cmd):
                 self._session = None
                 return
 
-            print("Open session successful")
+            print("Open session successful\n")
 
             if not self._session.exchange_keys():
-                print("Key exchange failed")
+                print("Key exchange failed\n")
                 self._session = None
                 return
 
-            print("Key exchange successful")
+            print("Key exchange successful\n")
 
             if not self._session.exchange_pin(pin):
-                print("Authentication failed")
+                print("Authentication failed\n")
                 self._session = None
                 return
+            
+            print("Authentication successful\n")
                 
         except (ValueError, TimeoutError, SerialException) as e:
             print(f"Error: {e}\nClosed session")
@@ -71,9 +73,9 @@ class Shell(cmd.Cmd):
             return 
         try:
             if not self._session.close(): # type: ignore
-                print("Session close failed")
+                print("Session close failed\n")
             else:
-                print("Session close successful")
+                print("Session close successful\n")
         except SerialException as e:
             print(f"Error: {e}\nClosed session")
         finally:
