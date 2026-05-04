@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import serial
+import time
 
 class Transport(ABC):
     @abstractmethod 
@@ -28,6 +29,7 @@ class SerialTransport(Transport):
         if self._debug:
             print(f"Sent frame: {data.hex(' ').upper()}")
         self._ser.write(data) # type: ignore
+        time.sleep(1)
 
     def receive(self, n: int) -> bytes:
         self._connect()
