@@ -2,6 +2,7 @@ import secrets
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 class Crypto:
     def __init__(self):
@@ -17,6 +18,7 @@ class Crypto:
         self._private_key = X25519PrivateKey.from_private_bytes(bytes(private_key_bytes))
         self._shared_key = None
         self._iv = None
+        self._aesgcm = None
 
     def public_key(self) -> bytes:
         return self._private_key.public_key().public_bytes_raw()
@@ -32,3 +34,14 @@ class Crypto:
 
         self._shared_key = hkdf_exp_aes.derive(prk)
         self._iv = hkdf_exp_iv.derive(prk)
+        self._aesgcm = AESGCM(self._shared_key)
+
+    def encrypt(self, plaintext: bytes) -> bytes:
+        ciphertext = self._aesgcm.encrypt(self._iv, plaintext, None) # type: ignore
+        return ciphertext[-16:] + ciphertext[:-16]
+
+    def decrypt(self, data: bytes) -> bytes: 
+        tag = data[:16]
+        actual_payload = data[16:]
+
+        return self._aesgcm.decrypt(self._iv, actual_payload + tag, None) # type: ignore

@@ -51,11 +51,14 @@ class Session:
 
     def exchange_pin(self, pin: str) -> bool:
         plaintext = pin.encode('ascii')
-        frame = framing.build_frame(MessageID.PIN_EXCHANGE, plaintext)    
+        ciphertext = self._crypto.encrypt(plaintext)
+        frame = framing.build_frame(MessageID.PIN_EXCHANGE, ciphertext)    
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.PIN_ACK)
-        return payload == b'\x00'
+        payload_decrypted = self._crypto.decrypt(payload)
+        
+        return payload_decrypted == b'\x00'
     
     def close(self) -> None: 
         frame = framing.build_frame(MessageID.SESSION_CLOSE, b'')
@@ -82,7 +85,8 @@ class Session:
             return False
 
         self._log("SEND", "FILE_CONTENTS", size=f"{len(file_content)} bytes") # TODO: change this with encryption details
-        frame = framing.build_frame(MessageID.FILE_CONTENT, file_content)
+        ciphertext = self._crypto.encrypt(file_content)
+        frame = framing.build_frame(MessageID.FILE_CONTENT, ciphertext)
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.FILE_COMPLETE_ACK)
@@ -118,10 +122,12 @@ class Session:
             self._transport.send(frame)
             raise e
         
+        file_content_decrypted = self._crypto.decrypt(file_content)
+        
         self._log("RECV", "FILE_CONTENTS", size=f"{len(file_content)} bytes", crc="OK") # TODO: change this with encryption details
 
         with open(local_path, 'wb') as f:
-            f.write(file_content)
+            f.write(file_content_decrypted)
 
         print(f"  Read complete, saved to {local_path}\n")
         return True

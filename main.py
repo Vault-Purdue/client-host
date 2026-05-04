@@ -49,6 +49,8 @@ class Shell(cmd.Cmd):
             if not success:             # TODO: this assumes the HSM closes the session after a failed pin exchanged
                 self._session = None    #       without having to send a SESSION_CLOSE. Check with whoever
                 print("Authentication failed")
+            else:
+                print("Authentication successful")
         
         except (ValueError, TimeoutError, SerialException) as e:
             print(f"Error: {e}\nClosed session")
