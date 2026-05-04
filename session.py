@@ -36,19 +36,22 @@ class Session:
                 print(f"           {key:<{width}} : {value}")
         print()
 
-    def open(self) -> None:
+    def open(self) -> bool:
         frame = framing.build_frame(MessageID.SESSION_OPEN, b'\x41')
         self._transport.send(frame)
 
-        # receive nothing
+        payload = self._expect_frame(MessageID.SESSION_OPEN)
+        return payload == b'\x41'
 
-    def exchange_keys(self) -> None:
+    def exchange_keys(self) -> bool:
         frame = framing.build_frame(MessageID.KEY_EXCHANGE, self._crypto.public_key())
         self._transport.send(frame)
 
         payload = self._expect_frame(MessageID.KEY_EXCHANGE)
         self._crypto.compute_shared_key(payload)
 
+        return True 
+    
     def exchange_pin(self, pin: str) -> bool:
         plaintext = pin.encode('ascii')
         ciphertext = self._crypto.encrypt(plaintext)

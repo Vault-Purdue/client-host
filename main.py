@@ -42,16 +42,25 @@ class Shell(cmd.Cmd):
                 return
 
         try:
-            self._session.open()
-            self._session.exchange_keys()
-            success = self._session.exchange_pin(pin)
+            if not self._session.open():
+                print("Open session failed")
+                self._session = None
+                return
 
-            if not success:             # TODO: this assumes the HSM closes the session after a failed pin exchanged
-                self._session = None    #       without having to send a SESSION_CLOSE. Check with whoever
+            print("Open session successful")
+
+            if not self._session.exchange_keys():
+                print("Key exchange failed")
+                self._session = None
+                return
+
+            print("Key exchange successful")
+
+            if not self._session.exchange_pin(pin):
                 print("Authentication failed")
-            else:
-                print("Authentication successful")
-        
+                self._session = None
+                return
+                
         except (ValueError, TimeoutError, SerialException) as e:
             print(f"Error: {e}\nClosed session")
             self._session = None
