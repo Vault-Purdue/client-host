@@ -15,8 +15,6 @@ def build_frame(msg_id: MessageID, payload: bytes) -> bytes:
 
     checksum = crc(payload)
     
-    # TODO: check endianness    
-    
     # > is big endian, B is unsigned 1 byte, H is unsigned 2 bytes
     frame = (
         SOF                             +
@@ -50,10 +48,6 @@ def parse_frame(data: bytes) -> tuple[MessageID, bytes]:
 def get_payload_len_from_header(header: bytes) -> int:
     return header[2]
 
-# TODO: the documentation says "If there is no payload, the checksum field should be 0x00."
-# Does this mean that the crc of any empty field should manually be forced to 0x00 (i.e. if check down here).
-# Or that if the message is without a payload, the crc should be 0x00. If there is a payload and the payload 
-# is 0x00, the crc is normally computed. (Right now I'm doing the second one)
 def crc(data: bytes) -> int:
     # using seed 0xFFFF and no reversed algorithm. Needs to match the config on HSM
     # (crcmod documentation says reversed algorithm is faster)

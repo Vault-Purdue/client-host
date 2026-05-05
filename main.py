@@ -2,7 +2,7 @@ import cmd
 import argparse
 import getpass
 from serial import SerialException
-from session import Session
+from session import Session, SessionClosedError
 from transport import *
 
 
@@ -40,6 +40,7 @@ class Shell(cmd.Cmd):
                 print("Pin must be made of 6 digits")
                 self._session = None
                 return
+            self._pin = pin
 
         try:
             if not self._session.open():
@@ -63,7 +64,7 @@ class Shell(cmd.Cmd):
             
             print("Authentication successful\n")
                 
-        except (ValueError, TimeoutError, SerialException) as e:
+        except (ValueError, TimeoutError, SerialException, SessionClosedError) as e:
             print(f"Error: {e}\nClosed session")
             self._session = None
 
@@ -100,7 +101,7 @@ class Shell(cmd.Cmd):
 
         except OSError as e:
             print(f"File error: {e}")
-        except (ValueError, TimeoutError, SerialException) as e:
+        except (ValueError, TimeoutError, SerialException, SessionClosedError) as e:
             print(f"Error: {e}\nClosed session")
             self._session = None
 
@@ -122,7 +123,7 @@ class Shell(cmd.Cmd):
             
         except OSError as e:
             print(f"File error: {e}")
-        except (ValueError, TimeoutError, SerialException) as e:
+        except (ValueError, TimeoutError, SerialException, SessionClosedError) as e:
             print(f"Error: {e}\nClosed session")
             self._session = None
 
