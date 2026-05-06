@@ -5,7 +5,12 @@ import struct
 from crypto import Crypto
 import textwrap
 
+# fatal, resets session
 class SessionClosedError(Exception):
+    pass
+
+# non-fatal, keeps session alive
+class AuthenticationError(Exception):
     pass
 
 class Session:
@@ -86,18 +91,36 @@ class Session:
                 print(textwrap.fill(str(value), width=120, initial_indent=prefix, subsequent_indent=indent))
         print()
 
-    def open(self) -> bool:
+    
+    def authenticate(self, pin: str) -> None:
+        if not self._open():
+            raise SessionClosedError("Handshake failed")
+        else:
+            print("Open session successful.\n")
+
+        if not self._exchange_keys():
+            raise SessionClosedError("Key exchange failed")
+        else:
+            print("Key exchange successful.\n")
+
+        if not self._exchange_pin(pin):
+            raise AuthenticationError("Invalid PIN")
+        else:
+            print("Authentication successful.\n")
+
+
+    def _open(self) -> bool:
         self._send_frame(MessageID.SESSION_OPEN, b'\x41')
         payload = self._expect_frame(MessageID.SESSION_OPEN)
         return payload == b'\x41'
 
-    def exchange_keys(self) -> bool:
+    def _exchange_keys(self) -> bool:
         self._send_frame(MessageID.KEY_EXCHANGE, self._crypto.public_key())
         payload = self._expect_frame(MessageID.KEY_EXCHANGE)
         self._crypto.compute_shared_key(payload)
         return True 
     
-    def exchange_pin(self, pin: str) -> bool:
+    def _exchange_pin(self, pin: str) -> bool:
         plaintext = pin.encode('ascii')
         ciphertext = self._crypto.encrypt(plaintext)
         self._send_frame(MessageID.PIN_EXCHANGE, ciphertext)

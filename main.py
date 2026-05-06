@@ -2,7 +2,7 @@ import cmd
 import argparse
 import getpass
 from serial import SerialException
-from session import Session, SessionClosedError
+from session import AuthenticationError, Session, SessionClosedError
 from transport import *
 
 
@@ -43,27 +43,9 @@ class Shell(cmd.Cmd):
             self._pin = pin
 
         try:
-            if not self._session.open():
-                print("Open session failed.")
-                self._session = None
-                return
-
-            print("Open session successful.\n")
-
-            if not self._session.exchange_keys():
-                print("Key exchange failed.\n")
-                self._session = None
-                return
-
-            print("Key exchange successful.\n")
-
-            if not self._session.exchange_pin(pin):
-                print("Authentication failed.\n")
-                self._session = None
-                return
-            
-            print("Authentication successful.\n")
-                
+            self._session.authenticate(self._pin) # type: ignore
+        except AuthenticationError as e:
+                print(f"Error: {e}")
         except (ValueError, TimeoutError, SerialException, SessionClosedError) as e:
             print(f"Error: {e}\nClosed session.")
             self._session = None
