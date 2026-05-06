@@ -3,6 +3,7 @@ import framing
 from protocol import MessageID
 import struct
 from crypto import Crypto
+import textwrap
 
 class SessionClosedError(Exception):
     pass
@@ -54,8 +55,7 @@ class Session:
                 label = "PIN_ACK"
                 decrypted_pin = self._crypto.decrypt(payload)
                 ack_value = "VALID" if decrypted_pin == b'\x00' else "INVALID"
-                fields = {"encrypted": "True", "size": f"{len(payload)} bytes",
-                          "decrypted_value" : ack_value}
+                fields = {"encrypted": "True", "size": f"{len(payload)} bytes", "value" : ack_value}
             case MessageID.SESSION_CLOSE:
                 label = "SESSION_CLOSE"
                 fields = {"encrypted": "False", "payload": payload.decode()}
@@ -65,7 +65,8 @@ class Session:
                 fields = {"encrypted": "False", "operation": op, "file_id": str(payload[1])}
             case MessageID.FILE_CONTENT:
                 label = "FILE_CONTENT"
-                fields = {"encrypted": "True", "size": f"{len(payload)} bytes", "crc": f"{framing.crc(payload):04X}"}
+                fields = {"encrypted": "True", "size": f"{len(payload)} bytes", "plaintext": self._crypto.decrypt(payload).decode(), 
+                           "ciphertext": payload.hex(' ', 4), "crc": f"{framing.crc(payload):04X}"}
             case MessageID.FILE_REQ_ACK:
                 label = "FILE_REQ_ACK"
                 fields = {"encrypted": "False", "status": "APPROVED" if payload == b'\x00' else "REJECTED"}
@@ -80,7 +81,9 @@ class Session:
         if fields:
             width = max(len(k) for k in fields)
             for key, value in fields.items():
-                print(f"           {key:<{width}} : {value}")
+                prefix = f"           {key:<{width}} : "
+                indent = " " * len(prefix)
+                print(textwrap.fill(str(value), width=120, initial_indent=prefix, subsequent_indent=indent))
         print()
 
     def open(self) -> bool:
@@ -111,7 +114,7 @@ class Session:
         with open(local_path, 'rb') as f:
             file_content = f.read()
             if len(file_content) != 88:
-                print(f"File must be exactly 88 bytes, got {len(file_content)}")
+                print(f"File must be exactly 88 bytes, got {len(file_content)}.")
                 return False
 
         file_id_bytes = struct.pack("B", int(file_id))
@@ -119,6 +122,7 @@ class Session:
 
         payload = self._expect_frame(MessageID.FILE_REQ_ACK)
         if payload != b'\x00':
+            print(f"    Write failed. Hsm rejected the request.\n")
             return False
 
         ciphertext = self._crypto.encrypt(file_content)
@@ -137,6 +141,7 @@ class Session:
 
         payload = self._expect_frame(MessageID.FILE_REQ_ACK)
         if payload != b'\x00':
+            print(f"    Read failed. Hsm rejected the request.\n")
             return False
 
         try:

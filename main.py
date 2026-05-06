@@ -44,28 +44,28 @@ class Shell(cmd.Cmd):
 
         try:
             if not self._session.open():
-                print("Open session failed")
+                print("Open session failed.")
                 self._session = None
                 return
 
-            print("Open session successful\n")
+            print("Open session successful.\n")
 
             if not self._session.exchange_keys():
-                print("Key exchange failed\n")
+                print("Key exchange failed.\n")
                 self._session = None
                 return
 
-            print("Key exchange successful\n")
+            print("Key exchange successful.\n")
 
             if not self._session.exchange_pin(pin):
-                print("Authentication failed\n")
+                print("Authentication failed.\n")
                 self._session = None
                 return
             
-            print("Authentication successful\n")
+            print("Authentication successful.\n")
                 
         except (ValueError, TimeoutError, SerialException, SessionClosedError) as e:
-            print(f"Error: {e}\nClosed session")
+            print(f"Error: {e}\nClosed session.")
             self._session = None
 
 
@@ -74,11 +74,11 @@ class Shell(cmd.Cmd):
             return 
         try:
             if not self._session.close(): # type: ignore
-                print("Session close failed\n")
+                print("Session close failed.\n")
             else:
-                print("Session close successful\n")
+                print("Session close successful.\n")
         except SerialException as e:
-            print(f"Error: {e}\nClosed session")
+            print(f"Error: {e}\nClosed session.")
         finally:
             self._session = None
 
@@ -124,7 +124,7 @@ class Shell(cmd.Cmd):
         except OSError as e:
             print(f"File error: {e}")
         except (ValueError, TimeoutError, SerialException, SessionClosedError) as e:
-            print(f"Error: {e}\nClosed session")
+            print(f"Error: {e}\nClosed session.")
             self._session = None
 
     def do_pin(self, arg):
